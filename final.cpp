@@ -113,7 +113,7 @@ std::string process_request(std::string s)
 	std::cout << (directory / file) << std::endl;
 
 	if (!boost::filesystem::exists(directory / file))
-		return "HTTP/1.0 404 Not Found\r\n\r\n";
+		return "HTTP/1.0 404 Not Found\r\nContent-length: 0\r\n\r\n";
 
 	std::string response("HTTP/1.0 200 OK\r\n");
 

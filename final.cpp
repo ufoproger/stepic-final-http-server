@@ -12,6 +12,7 @@
 #include <fstream>
 #include <streambuf>
 
+// нихачу getopt!
 using boost::asio::ip::tcp;
 namespace po = boost::program_options;
 
@@ -188,6 +189,7 @@ pid_t daemonize()
 
 int main(int argc, char* argv[])
 {
+	getopt(argc, argv, "");
 	po::options_description desc("Параметры сервера");
 
 	desc.add_options()

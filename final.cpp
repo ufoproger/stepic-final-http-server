@@ -9,6 +9,8 @@
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/regex.hpp>
+#include <fstream>
+#include <streambuf>
 
 using boost::asio::ip::tcp;
 namespace po = boost::program_options;
@@ -18,7 +20,80 @@ const int max_length = 65536;
 //std::string directory;
 boost::filesystem::path directory;
 
-typedef boost::shared_ptr<tcp::socket> socket_ptr;
+typedef boost::shared_ptr<boost::asio::ip::tcp::socket> socket_ptr;
+/*
+std::string urlencode(const std::string &s)
+{
+std::string escaped="";
+int max = c.length();
+for(int i=0; i<max; i++)
+{
+if ( (48 <= c[i] && c[i] <= 57) ||//0-9
+(65 <= c[i] && c[i] <= 90) ||//abc...xyz
+(97 <= c[i] && c[i] <= 122) || //ABC...XYZ
+(c[i]=='~' || c[i]=='!' || c[i]=='*' || c[i]=='(' || c[i]==')' || c[i]=='\'')
+)
+{
+escaped.append( &c[i], 1);
+}
+else
+{
+escaped.append("%");
+escaped.append( char2hex(c[i]) );//converts char 255 to string "ff"
+}
+}
+
+wstring escaped_w = L"";
+
+wchar_t w[1024];
+mbstowcs((wchar_t*)&w, escaped.c_str(), 1024);
+
+escaped_w = wstring(w);
+
+return escaped_w;
+}
+*/
+// Функция URL-декодирования.
+// Функция преобразует строку данных st в нормальное представление.
+// Результат помещается в ту же строку, что была передана в параметрах.
+std::string urldecode(std::string str)
+{
+	char hex[3];
+	int code;
+
+	std::string result;
+
+	for (auto it = str.begin(); it != str.end(); ++it)
+	{
+		switch (*it)
+		{
+			case '%':
+			{
+				hex[0] = *(++it);
+				hex[1] = *(++it);
+				hex[2] = 0;
+
+				sscanf(hex, "%X", &code);
+
+				result.push_back((char)code);
+
+				break;
+			}
+
+			case '+':
+			{
+				result.push_back(' ');
+
+				break;
+			}
+
+			default:
+				result.push_back(*it);
+		}
+	}
+
+	return result;
+}
 
 std::string process_request(std::string s)
 {
@@ -32,11 +107,26 @@ std::string process_request(std::string s)
 
 	std::cout << (directory / file) << std::endl;
 
-	if (!boost::filesystem::exists(directory / file))
-		return "HTTP/1.0 404 Not Found";
-	//assert(boost::filesystem::exists(directory / file));
+	file = file.substr(0, file.find_first_of('?'));
+	file = urldecode(file);
 
-	return result[1];
+	std::cout << (directory / file) << std::endl;
+
+	if (!boost::filesystem::exists(directory / file))
+		return "HTTP/1.0 404 Not Found\r\n\r\n";
+
+	std::string response("HTTP/1.0 200 OK\r\n");
+
+	response += "Connection: close\r\n";
+
+	std::ifstream fin((directory / file).string());
+	std::string content((std::istreambuf_iterator<char>(fin)), std::istreambuf_iterator<char>());
+
+	response += "Content-Type: text/html\r\n";
+	response += "Content-Length: " + std::to_string(content.size()) + "\r\n";
+	response += "\r\n" + content;
+
+	return response;
 }
 
 void session(socket_ptr sock)
@@ -52,7 +142,7 @@ void session(socket_ptr sock)
 			return;
 		else if (error)
 			throw boost::system::system_error(error);
-	
+
 		std::string s(data);
 
 		std::cout << "received = '" << s << "'" << std::endl;
@@ -60,7 +150,7 @@ void session(socket_ptr sock)
 		s = process_request(s);
 		std::cout << "response = '" << s << "'" << std::endl;
 
-		boost::asio::write(*sock, boost::asio::buffer(data, length));
+		boost::asio::write(*sock, boost::asio::buffer(s));
 	}
 	catch (std::exception& e)
 	{
@@ -99,7 +189,7 @@ pid_t daemonize()
 int main(int argc, char* argv[])
 {
 	po::options_description desc("Параметры сервера");
-	
+
 	desc.add_options()
 		("help", "Этот вывод")
 		("port,p", po::value<int>(), "Порт")
@@ -109,7 +199,7 @@ int main(int argc, char* argv[])
 
 	po::variables_map vm;
 	po::store(po::parse_command_line(argc, argv, desc), vm);
-	po::notify(vm);    
+	po::notify(vm);
 
 	if (vm.count("help")) {
 		std::cout << desc << "\n";
@@ -158,9 +248,9 @@ int main(int argc, char* argv[])
 
 	std::cout << "\"" << directory << "\"" << " -> " << host << ":" << port << "." << std::endl;
 
-	//daemonize();
-	std::cout << "result = '" << process_request("GET test.html?123 HTTP/1.0\r\n") << "'" << std::endl;
-	return 0;
+	daemonize();
+	//std::cout << "result = '" << process_request("GET test+%48%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82.html?123 HTTP/1.0\r\n") << "'" << std::endl;
+	//return 0;
 
 	try
 	{
